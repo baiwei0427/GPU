@@ -60,13 +60,18 @@ float reduce(float *h_in, int array_size)
      || cudaMalloc((void**) &d_out, sizeof(float)) != cudaSuccess)
         goto out;
     
+
+    //printf("Shared memory per block in bytes: %d\n", threads * sizeof(float));
     // copy the input array from the host memory to the GPU memory
     cudaMemcpy(d_in, h_in, array_size * sizeof(float), cudaMemcpyHostToDevice);
     // first stage reduce
     reduce_kernel0<<<blocks, threads, threads * sizeof(float)>>>(d_intermediate, d_in);
-    // second stage reduce
+    
     threads = blocks;
     blocks = 1;
+
+    //printf("Shared memory per block in bytes: %d\n", threads * sizeof(float));
+    // second stage reduce    
     reduce_kernel0<<<blocks, threads, threads * sizeof(float)>>>(d_out, d_intermediate);
     // copy the result from the GPU memory to the host memory
     cudaMemcpy(&result, d_out, sizeof(float), cudaMemcpyDeviceToHost);   
