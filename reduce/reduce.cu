@@ -16,7 +16,7 @@ __global__ void reduce_kernel0(float *d_out, float *d_in)
     // Ensure all elements have been copied into shared memory
     __syncthreads();
 
-    // s = 1, 2, 4, 8, .....
+    // s = 1, 2, 4, 8, ..... blockDim.x / 2
     for (unsigned int s = 1; s < blockDim.x; s = (s << 1)) {
         if (tid % (s << 1) == 0) {
             s_data[tid] += s_data[tid + s];
@@ -42,7 +42,7 @@ float reduce(float *h_in, int array_size)
 {
     float result = 0;
     // # of threads per block. It should be the power of two
-    int threads = 64;
+    int threads = 1 << 10;
     // # of blocks in total. 
     int blocks = 1;
     // GPU memory pointers
@@ -63,11 +63,11 @@ float reduce(float *h_in, int array_size)
     // copy the input array from the host memory to the GPU memory
     cudaMemcpy(d_in, h_in, array_size * sizeof(float), cudaMemcpyHostToDevice);
     // first stage reduce
-    reduce_kernel0<<<blocks, threads, blocks * sizeof(float)>>>(d_intermediate, d_in);
+    reduce_kernel0<<<blocks, threads, threads * sizeof(float)>>>(d_intermediate, d_in);
     // second stage reduce
     threads = blocks;
     blocks = 1;
-    reduce_kernel0<<<blocks, threads, blocks * sizeof(float)>>>(d_out, d_intermediate);
+    reduce_kernel0<<<blocks, threads, threads * sizeof(float)>>>(d_out, d_intermediate);
     // copy the result from the GPU memory to the host memory
     cudaMemcpy(&result, d_out, sizeof(float), cudaMemcpyDeviceToHost);   
 
@@ -81,7 +81,7 @@ out:
 
 int main() 
 {
-    const int ARRAY_SIZE = 1 << 10;
+    const int ARRAY_SIZE = 1 << 20;
     float h_in[ARRAY_SIZE];
     float sum = 0.0f;
 
