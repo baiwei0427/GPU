@@ -100,8 +100,8 @@ inline bool is_power_of_2(int n)
 }
 
 
-// input: array (in host memory), array size, iterations, expected result 
-void reduce(int *h_in, int array_size, int iters, int expected_result)
+// input: array (in host memory), array size, expected result, kernel function ID and iterations 
+void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int iters)
 {
     // # of threads per block. It should be the power of two
     int threads = 1 << 10;
@@ -130,10 +130,25 @@ void reduce(int *h_in, int array_size, int iters, int expected_result)
 
     // run many times
     for (int i = 0; i < iters; i++) {
-        // first stage reduce
-        reduce_kernel2<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
-        // second stage reduce    
-        reduce_kernel2<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
+        switch (kernel_id) {
+            case 0: 
+                // first stage reduce
+                reduce_kernel0<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
+                // second stage reduce    
+                reduce_kernel0<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
+                break;
+            case 1:
+                reduce_kernel1<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
+                reduce_kernel1<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
+                break;                
+            case 2:
+                reduce_kernel2<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
+                reduce_kernel2<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
+                break;
+            default:
+                printf("Invalid kernel function ID %d\n", kernel_id);   
+                goto out;      
+        }
     }
 
     // copy the result from the GPU memory to the host memory
@@ -159,8 +174,20 @@ inline int random_range(int min, int max)
         return min + rand() / (RAND_MAX / (max - min + 1) + 1);
 }
 
-int main() 
+int main(int argc, char **argv) 
 {
+    if (argc != 3) {
+        printf("%s [kernel ID] [iterations]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    int kernel_id = atoi(argv[1]);
+    int iters = atoi(argv[2]);
+    if (iters <= 0 || kernel_id < 0) {
+        printf("Invalid input\n");
+        exit(EXIT_FAILURE);
+    }
+
     const int ARRAY_SIZE = 1 << 20;
     int h_in[ARRAY_SIZE];
     int sum = 0;
@@ -180,8 +207,7 @@ int main()
     cudaEventCreate(&stop);
     
     cudaEventRecord(start, 0);
-    const int iters = 1000;
-    reduce(h_in, ARRAY_SIZE, iters, sum);
+    reduce(h_in, ARRAY_SIZE, sum, kernel_id, iters);
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
 
