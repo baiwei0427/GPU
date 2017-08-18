@@ -19,7 +19,7 @@ __global__ void reduce_kernel0(int *d_out, int *d_in)
     __syncthreads();
 
     // s = 1, 2, 4, 8, ..... blockDim.x / 2
-    for (unsigned int s = 1; s < blockDim.x; s = (s << 1)) {
+    for (unsigned int s = 1; s < blockDim.x; s <<= 1) {
         if (tid % (s << 1) == 0) {
             s_data[tid] += s_data[tid + s];
         }
@@ -49,7 +49,7 @@ __global__ void reduce_kernel1(int *d_out, int *d_in)
     __syncthreads();    
 
     // s = 1, 2, 4, 8, ..... blockDim.x / 2
-    for (unsigned int s = 1; s < blockDim.x; s = (s << 1)) {
+    for (unsigned int s = 1; s < blockDim.x; s <<= 1) {
         int index = tid * s * 2;
 
         if (index + s < blockDim.x) {
@@ -81,7 +81,7 @@ __global__ void reduce_kernel2(int *d_out, int *d_in)
     __syncthreads();    
 
     // s = blockDim.x / 2, ....., 8, 4, 2, 1
-    for (unsigned int s = (blockDim.x >> 1); s >= 1; s = (s >> 1)) {
+    for (unsigned int s = (blockDim.x >> 1); s >= 1; s >>= 1) {
         if (tid < s) {
             s_data[tid] += s_data[tid + s];
         }
@@ -93,6 +93,7 @@ __global__ void reduce_kernel2(int *d_out, int *d_in)
         d_out[blockIdx.x] = s_data[0];
     }
 }
+
 
 inline bool is_power_of_2(int n)
 {
@@ -131,20 +132,23 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
     // run many times
     for (int i = 0; i < iters; i++) {
         switch (kernel_id) {
+            // Interleaved addressing with divergent branching 
             case 0: 
                 // first stage reduce
                 reduce_kernel0<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
                 // second stage reduce    
-                reduce_kernel0<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
+                reduce_kernel0<<<1, blocks, blocks * sizeof(int)>>>(d_out, d_intermediate);
                 break;
+            // Interleaved addressing with bank conflicts
             case 1:
                 reduce_kernel1<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
-                reduce_kernel1<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
-                break;                
+                reduce_kernel1<<<1, blocks, blocks * sizeof(int)>>>(d_out, d_intermediate);
+                break;  
+            // Sequential addressing              
             case 2:
                 reduce_kernel2<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
-                reduce_kernel2<<<1, blocks, threads * sizeof(int)>>>(d_out, d_intermediate);
-                break;
+                reduce_kernel2<<<1, blocks, blocks * sizeof(int)>>>(d_out, d_intermediate);
+                break;          
             default:
                 printf("Invalid kernel function ID %d\n", kernel_id);   
                 goto out;      
