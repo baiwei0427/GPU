@@ -94,6 +94,35 @@ __global__ void reduce_kernel2(int *d_out, int *d_in)
     }
 }
 
+// First add during global load
+__global__ void reduce_kernel3(int *d_out, int *d_in)
+{
+    extern __shared__ int s_data[];
+
+    // thread ID inside the block
+    unsigned int tid = threadIdx.x;
+    // global ID across all blocks
+    unsigned int gid = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    s_data[tid] = d_in[gid] + d_in[gid + blockDim.x];
+    // Ensure all elements have been copied into shared memory
+    __syncthreads();    
+
+    // s = blockDim.x / 2, ....., 8, 4, 2, 1
+    for (unsigned int s = (blockDim.x >> 1); s >= 1; s >>= 1) {
+        if (tid < s) {
+            s_data[tid] += s_data[tid + s];
+        }
+        // Ensure all threads in the block finish add in this round
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        d_out[blockIdx.x] = s_data[0];
+    }    
+}
 
 inline bool is_power_of_2(int n)
 {
@@ -148,7 +177,12 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
             case 2:
                 reduce_kernel2<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
                 reduce_kernel2<<<1, blocks, blocks * sizeof(int)>>>(d_out, d_intermediate);
-                break;          
+                break;
+            // First add during global load
+            case 3:
+                reduce_kernel3<<<blocks, threads / 2 , threads / 2 * sizeof(int)>>>(d_intermediate, d_in);
+                reduce_kernel3<<<1, blocks / 2, blocks / 2 * sizeof(int)>>>(d_out, d_intermediate);  
+                break;              
             default:
                 printf("Invalid kernel function ID %d\n", kernel_id);   
                 goto out;      
