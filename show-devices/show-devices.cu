@@ -11,6 +11,7 @@ void print_device_info(cudaDeviceProp prop)
         printf("Maximum size of each dimension of a grid: %d %d %d\n", prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2]);
         printf("Maximum size of each dimension of a block: %d %d %d\n", prop.maxThreadsDim[0], prop.maxThreadsDim[1], prop.maxThreadsDim[2]);
         printf("Maximum number of threads per block: %d\n", prop.maxThreadsPerBlock);
+        printf("Maximum resident threads per multiprocessor: %d\n", prop.maxThreadsPerMultiProcessor);
         
         printf("Global memory available on device in bytes: %u\n", prop.totalGlobalMem);
         printf("Shared memory available per block in bytes: %d\n", prop.sharedMemPerBlock);
