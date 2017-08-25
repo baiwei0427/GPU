@@ -24,6 +24,35 @@ __global__ void hillissteele_scan(int *d_out, int *d_in, unsigned int size)
         d_out[tid] = s_data[tid];
 }
 
+__global__ void hillissteele_scan2(int *d_out, int *d_in, unsigned int size)
+{
+        extern __shared__ int s_data[];
+        // thread ID inside the block
+        unsigned int tid = threadIdx.x;
+        int in = 0, out = 1;
+
+        // copy input from global memory to shared memory
+        // s_data actually has two arrays: in and out
+        s_data[out * size + tid] = d_in[tid];
+        __syncthreads();
+
+        for (int offset = 1; offset < size; offset <<= 1) {
+                // swap in and out
+                in = out;
+                out = 1 - in;
+
+                s_data[out * size + tid] = s_data[in * size + tid];
+                if (tid >= offset) {
+                        s_data[out * size + tid] += s_data[in * size + tid - offset];
+                } 
+
+                __syncthreads();
+        }
+
+        // copy output from shared memory to global memory
+        d_out[tid] = s_data[out * size + tid];
+}
+
 __global__ void blelloch_scan(int *d_out, int *d_in, unsigned int size, bool inclusive)
 {
         extern __shared__ int s_data[];
@@ -79,6 +108,62 @@ __global__ void blelloch_scan(int *d_out, int *d_in, unsigned int size, bool inc
         }
 }
 
+__global__ void blelloch_scan2(int *d_out, int *d_in, unsigned int size, bool inclusive)
+{
+        // allocated on invocation
+        extern __shared__ int s_data[];
+        int tid = threadIdx.x;
+        int offset = 1;
+
+        // load input into shared memory
+        s_data[2 * tid] = d_in[2 * tid]; 
+        s_data[2 * tid + 1] = d_in[2 * tid + 1];
+
+        // build sum in place up the tree
+        for (int d = size >> 1; d > 0; d >>= 1) {
+                __syncthreads();
+                if (tid < d) {
+                        int ai = offset * (2 * tid + 1) - 1;
+                        int bi = offset * (2 * tid + 2) - 1;
+                        s_data[bi] += s_data[ai];
+                }
+                offset <<= 1;
+        }
+
+        // clear the last element
+        if (tid == 0) { 
+                s_data[size - 1] = 0; 
+        } 
+
+        // traverse down tree & build scan        
+        for (int d = 1; d < size; d <<= 1) {
+                offset >>= 1;
+                __syncthreads();
+                if (tid < d) {
+                        int ai = offset * (2 * tid + 1) - 1;
+                        int bi = offset * (2 * tid + 2)-1;
+                        int t = s_data[ai];
+                        s_data[ai] = s_data[bi];
+                        s_data[bi] += t;
+                }
+        }
+        
+        __syncthreads();
+
+        // write results to device memory
+        if (!inclusive) {
+                d_out[2 * tid] = s_data[2 * tid]; 
+                d_out[2 * tid + 1] = s_data[2 * tid + 1];
+        } else {
+                d_out[2 * tid] = s_data[2 * tid + 1];
+                if (2 * tid + 2 < size) {
+                        d_out[2 * tid + 1] = s_data[2 * tid + 2];
+                } else {
+                        d_out[2 * tid + 1] = s_data[2 * tid + 1] + d_in[size - 1];
+                }
+        }
+}
+
 int main()
 {
         const int iters = 1000;
@@ -111,7 +196,9 @@ int main()
         cudaEventRecord(start, 0);
         for (int i = 0; i < iters; i++) {
                 //hillissteele_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size);
-                blelloch_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
+                hillissteele_scan2<<<1, array_size, 2 * array_size * sizeof(int)>>>(d_out, d_in, array_size);
+                //blelloch_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
+                //blelloch_scan2<<<1, array_size / 2, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
         }
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
@@ -127,19 +214,20 @@ int main()
 
 
         for (int i = 0; i < array_size; i++) {
+                //printf("%d ", h_out[i]);
                 if (h_out[i] != scan_result[i]) {
                         printf("Wrong result\n");
                         goto out;
                 }
         }
 
-        printf("Correct result\n");
-
         /*for (int i = 0; i < array_size; i++) {
                 printf("%d ", h_out[i]);
         }
 
         printf("\n");*/
+
+        printf("Correct result\n");
 out:
         cudaFree(d_in);
         cudaFree(d_out);        
