@@ -56,99 +56,41 @@ __global__ void hillissteele_scan2(int *d_out, int *d_in, unsigned int size)
 __global__ void blelloch_scan(int *d_out, int *d_in, unsigned int size, bool inclusive)
 {
         extern __shared__ int s_data[];
-        // thread ID inside the block
-        unsigned int tid = threadIdx.x;
-
-        // copy input from global memory to shared memory
-        s_data[tid] = d_in[tid];
-        __syncthreads();
-
-        // up sweep
-        for (int offset = 1; offset < size; offset <<= 1) {
-                int tmp = s_data[tid];
-                if ((tid + 1) % (offset << 1) == 0) {
-                        tmp += s_data[tid - offset];
-                }
-                __syncthreads();
-                s_data[tid] = tmp;
-                __syncthreads(); 
-        }
-
-        // down sweep
-        if (tid == size - 1)
-                s_data[tid] = 0;
-        __syncthreads();        
-        
-        for (int offset = size / 2; offset > 0; offset >>= 1) {
-                int left, right;
-                if ((tid + 1) % (offset << 1) == 0) {
-                        left = s_data[tid];
-                        right = s_data[tid] + s_data[tid - offset];
-                }
-                __syncthreads();
-
-                if ((tid + 1) % (offset << 1) == 0) {
-                        s_data[tid - offset] = left;
-                        s_data[tid] = right;
-                }
-                __syncthreads();
-        }
-
-        // copy output from shared memory to global memory
-        // by default, blelloch algorithm generates exclusive scan results 
-        if (!inclusive) {
-                d_out[tid] = s_data[tid];
-        
-        // to get inclusive results
-        } else {
-                if (tid < size - 1)
-                        d_out[tid] = s_data[tid + 1];
-                else
-                        d_out[tid] = s_data[tid] + d_in[tid];
-        }
-}
-
-__global__ void blelloch_scan2(int *d_out, int *d_in, unsigned int size, bool inclusive)
-{
-        // allocated on invocation
-        extern __shared__ int s_data[];
         int tid = threadIdx.x;
-        int offset = 1;
 
-        // load input into shared memory
-        s_data[2 * tid] = d_in[2 * tid]; 
+        // copy input into shared memory
+        // note that we only have size / 2 threads in total. so each thread copies 2 elements.
+        s_data[2 * tid] = d_in[2 * tid];
         s_data[2 * tid + 1] = d_in[2 * tid + 1];
 
-        // build sum in place up the tree
-        for (int d = size >> 1; d > 0; d >>= 1) {
-                __syncthreads();
+        // up-sweep
+        int offset = 1;
+        for (int d = size / 2; d > 0; d >>= 1) {
                 if (tid < d) {
-                        int ai = offset * (2 * tid + 1) - 1;
-                        int bi = offset * (2 * tid + 2) - 1;
-                        s_data[bi] += s_data[ai];
+                        int index = 2 * offset * (tid + 1) - 1;
+                        s_data[index] += s_data[index - offset];
                 }
+                __syncthreads();
                 offset <<= 1;
         }
 
         // clear the last element
         if (tid == 0) { 
                 s_data[size - 1] = 0; 
-        } 
+        }  
 
-        // traverse down tree & build scan        
-        for (int d = 1; d < size; d <<= 1) {
-                offset >>= 1;
-                __syncthreads();
+        offset = size >> 1;
+        // down-sweep
+         for (int d = 1; d < size; d <<= 1) {
                 if (tid < d) {
-                        int ai = offset * (2 * tid + 1) - 1;
-                        int bi = offset * (2 * tid + 2)-1;
-                        int t = s_data[ai];
-                        s_data[ai] = s_data[bi];
-                        s_data[bi] += t;
+                        int index = 2 * offset * (tid + 1) - 1;
+                        int tmp = s_data[index];
+                        s_data[index] += s_data[index - offset];
+                        s_data[index - offset] = tmp;
                 }
-        }
-        
-        __syncthreads();
+                __syncthreads();
+                offset >>= 1;
+         }
 
         // write results to device memory
         if (!inclusive) {
@@ -161,7 +103,7 @@ __global__ void blelloch_scan2(int *d_out, int *d_in, unsigned int size, bool in
                 } else {
                         d_out[2 * tid + 1] = s_data[2 * tid + 1] + d_in[size - 1];
                 }
-        }
+        }         
 }
 
 int main()
@@ -196,9 +138,10 @@ int main()
         cudaEventRecord(start, 0);
         for (int i = 0; i < iters; i++) {
                 //hillissteele_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size);
-                hillissteele_scan2<<<1, array_size, 2 * array_size * sizeof(int)>>>(d_out, d_in, array_size);
-                //blelloch_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
-                //blelloch_scan2<<<1, array_size / 2, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
+                //hillissteele_scan2<<<1, array_size, 2 * array_size * sizeof(int)>>>(d_out, d_in, array_size);
+                
+                // blelloch only needs array_size / 2 threades in total
+                blelloch_scan<<<1, array_size / 2, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
         }
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
