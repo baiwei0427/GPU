@@ -106,6 +106,15 @@ __global__ void blelloch_scan(int *d_out, int *d_in, unsigned int size, bool inc
         }         
 }
 
+// generate a random integer in [min, max]
+inline int random_range(int min, int max)
+{
+    if (min > max)
+        return 0;
+    else
+        return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+}
+
 int main()
 {
         const int iters = 1000;
@@ -113,8 +122,12 @@ int main()
         int h_in[array_size], h_out[array_size], scan_result[array_size];
         int *d_in, *d_out;
 
+        // initialize random number generator
+        srand(time(NULL));
+        int min = 0, max = 10;
+
         for (int i = 0; i < array_size; i++) {
-                h_in[i] = i + 1;
+                h_in[i] = random_range(min, max);
                 // calculate expected inclusive scan result
                 if (i == 0) {
                         scan_result[i] = h_in[i];
