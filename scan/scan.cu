@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-__global__ void hillissteele_scan(int *d_out, int *d_in, unsigned int size)
+__global__ void hillissteele_scan_kernel(int *d_out, int *d_in, unsigned int size)
 {
         extern __shared__ int s_data[];
         // thread ID inside the block
@@ -24,7 +24,7 @@ __global__ void hillissteele_scan(int *d_out, int *d_in, unsigned int size)
         d_out[tid] = s_data[tid];
 }
 
-__global__ void hillissteele_scan2(int *d_out, int *d_in, unsigned int size)
+__global__ void hillissteele_scan2_kernel(int *d_out, int *d_in, unsigned int size)
 {
         extern __shared__ int s_data[];
         // thread ID inside the block
@@ -53,7 +53,7 @@ __global__ void hillissteele_scan2(int *d_out, int *d_in, unsigned int size)
         d_out[tid] = s_data[out * size + tid];
 }
 
-__global__ void blelloch_scan(int *d_out, int *d_in, unsigned int size, bool inclusive)
+__global__ void blelloch_scan_kernel(int *d_out, int *d_in, unsigned int size, bool inclusive)
 {
         extern __shared__ int s_data[];
         int tid = threadIdx.x;
@@ -150,11 +150,11 @@ int main()
 
         cudaEventRecord(start, 0);
         for (int i = 0; i < iters; i++) {
-                //hillissteele_scan<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size);
-                //hillissteele_scan2<<<1, array_size, 2 * array_size * sizeof(int)>>>(d_out, d_in, array_size);
+                //hillissteele_scan_kernel<<<1, array_size, array_size * sizeof(int)>>>(d_out, d_in, array_size);
+                //hillissteele_scan2_kernel<<<1, array_size, 2 * array_size * sizeof(int)>>>(d_out, d_in, array_size);
                 
                 // blelloch only needs array_size / 2 threades in total
-                blelloch_scan<<<1, array_size / 2, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
+                blelloch_scan_kernel<<<1, array_size / 2, array_size * sizeof(int)>>>(d_out, d_in, array_size, true);
         }
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
