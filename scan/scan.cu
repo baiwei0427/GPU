@@ -259,18 +259,36 @@ inline int random_range(int a, int b)
 
 int main(int argc, char **argv)
 {
-        const int iters = 10000;
-        const int array_size = 1 << 16;
-        const int threads_per_block = 1 << 10;
+        // by default, we choose the first GPU device 
+        int device_index = 0;
+        // # of elements to scan
+        int array_size = 1 << 20;
+        int kernel_id, iters, max_threads_per_block, device_count;
         int *h_in, *h_out, *scan_result;
-        int kernel_id = 0;
+        cudaDeviceProp prop;
 
-        if (argc != 2) {
-                printf("Usage: %s [kernel ID]\n", argv[0]);
-                exit(1);
-        } else {
-                kernel_id = atoi(argv[1]);
+        if (argc != 3) {
+                printf("Usage: %s [kernel ID] [iteration]\n", argv[0]);
+                exit(EXIT_FAILURE);
         }
+        
+        kernel_id = atoi(argv[1]);
+        iters = atoi(argv[2]);
+
+        if (iters <= 0) {
+                printf("Invalid iteration input %d\n", iters);
+                exit(EXIT_FAILURE);  
+        }
+
+        cudaGetDeviceCount(&device_count);
+        if (device_count == 0) {
+                printf("No GPU device\n");
+                exit(EXIT_FAILURE);
+        }
+
+        cudaSetDevice(0);
+        cudaGetDeviceProperties(&prop, device_index);
+        max_threads_per_block = prop.maxThreadsPerBlock;
 
         h_in = (int*)malloc(array_size * sizeof(int));
         h_out = (int*)malloc(array_size * sizeof(int));
@@ -300,7 +318,7 @@ int main(int argc, char **argv)
 
         cudaEventRecord(start, 0);
 
-        scan(h_out, h_in, array_size, threads_per_block, kernel_id, iters, scan_result);
+        scan(h_out, h_in, array_size, max_threads_per_block, kernel_id, iters, scan_result);
         
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
