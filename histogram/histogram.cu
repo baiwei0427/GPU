@@ -1,26 +1,52 @@
 #include <stdio.h>
 #include <sys/time.h>
 
-// do histogram computation on array 'buf' with 'size' bytes, save results to 'histo'
-void cpu_histo(unsigned char *buf, unsigned int size, unsigned int *histo)
+// do histogram computation on array 'buf' for 'iters' times 
+// save results to 'histo'
+// return average histogram computation time (per iteration) in millisecond
+double cpu_histo(unsigned char *buf, 
+                 unsigned int buf_size, 
+                 unsigned int *histo, 
+                 unsigned int histo_size, 
+                 unsigned int iters)
 {
-        for (int i = 0; i < size; i++) {
-                histo[buf[i]]++;
+        struct timeval start_time, stop_time;
+
+        if (iters == 0 || buf_size == 0 || histo_size == 0)
+                return 0;
+
+        gettimeofday(&start_time, NULL);
+        // for each round
+        for (int i = 0; i < iters; i++) {
+                // initialize elements of histo to all 0
+                memset(histo, 0, histo_size * sizeof(int));
+                // histogram computation
+                for (int k = 0; k < buf_size; k++) {
+                        histo[buf[i]]++;
+                }
         }
+        gettimeofday(&stop_time, NULL);
+
+        // measure total time (in millisecond) on GPU
+        double total_time_ms = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
+        // return average per round elapsed time
+        return total_time_ms / iters;
 }
 
 int main(int argc, char **argv)
 {
-        // size of array: 100M
-        unsigned int array_size = 100 << 20;
         // size of histogram
         unsigned int histo_size = 256;
-        unsigned char *buffer = (unsigned char*)malloc(array_size);
         unsigned int histo[histo_size];
         unsigned int histo_count = 0;
-        struct timeval start_time, stop_time;
 
-        if (!buffer) {
+        unsigned int iters = 10;
+
+        // size of array: 100M
+        unsigned int array_size = 100 << 20;
+        unsigned char *array = (unsigned char*)malloc(array_size);
+
+        if (!array) {
                 exit(EXIT_FAILURE);
         }
 
@@ -29,23 +55,12 @@ int main(int argc, char **argv)
         // initialize array with random numbers
         for (int i = 0; i < array_size; i++) {
                 // generate a random number in range [0, 255]
-                buffer[i] = rand() & 0xff;
+                array[i] = rand() & 0xff;
         }
 
-        // initialize histogram results 
-        for (int i = 0; i < histo_size; i++) {
-                histo[i] = 0;
-        }
-
-        gettimeofday(&start_time, NULL);
         
-        cpu_histo(buffer, array_size, histo);
-        
-        gettimeofday(&stop_time, NULL);
-
-        // measure histogram computation time (in millisecond) on GPU
-        double elapsed_time_ms = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec)/1000.0;
-        printf("Time elapsed: %.2f ms\n", elapsed_time_ms);
+        double result = cpu_histo(array, array_size, histo, histo_size, iters);
+        printf("Result: %f ms\n", result);
 
         for (int i = 0; i < histo_size; i++) {
                 //printf("%d %u\n", i, histo[i]);
@@ -56,6 +71,6 @@ int main(int argc, char **argv)
                 printf("Wrong result\n");
         }
 
-        free(buffer);
+        free(array);
         return 0;
 }
