@@ -21,8 +21,8 @@ double cpu_histo(unsigned char *buf,
                 // initialize elements of histo to all 0
                 memset(histo, 0, histo_size * sizeof(int));
                 // histogram computation
-                for (int k = 0; k < buf_size; k++) {
-                        histo[buf[i]]++;
+                for (int j = 0; j < buf_size; j++) {
+                        histo[buf[j]]++;
                 }
         }
         gettimeofday(&stop_time, NULL);
