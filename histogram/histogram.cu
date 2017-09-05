@@ -173,6 +173,9 @@ int main(int argc, char **argv)
                 goto out;
         }
 
+        // establish CUDA context
+        cudaSetDevice(0);
+
         gettimeofday(&start_time, NULL);
         // calculate histogram results on GPU
         gpu_histo(array, array_size, histo, histo_size, iters);
