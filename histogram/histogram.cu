@@ -174,10 +174,10 @@ int main(int argc, char **argv)
         }
 
         // establish CUDA context
-        cudaSetDevice(0);
+        cudaFree(0);
 
+        // GPU implementation 1
         gettimeofday(&start_time, NULL);
-        // calculate histogram results on GPU
         gpu_histo(array, array_size, histo, histo_size, iters);
         gettimeofday(&stop_time, NULL);
         elapsed_time = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
@@ -195,8 +195,8 @@ int main(int argc, char **argv)
 
         printf("Correct results\n");
 
+        // GPU implementation 2
         gettimeofday(&start_time, NULL);
-        // calculate histogram results on GPU
         gpu_histo2(array, array_size, histo, histo_size, iters);
         gettimeofday(&stop_time, NULL);
         elapsed_time = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
