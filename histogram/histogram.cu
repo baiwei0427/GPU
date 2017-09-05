@@ -1,6 +1,62 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <math.h>
+#include "helper_cuda.h"
+
+__global__ void histo_kernel2(unsigned char *d_in, unsigned int d_in_size, unsigned int *d_out)
+{
+        unsigned int i = threadIdx.x + blockIdx.x * blockDim.x;
+        // total # of launched threads 
+        unsigned int stride = blockDim.x * gridDim.x;
+        
+        while (i < d_in_size) {
+                atomicAdd(&d_out[d_in[i]], 1);
+                i += stride;     
+        }   
+}
+
+// do histogram computation on GPU
+// input: h_in (size: h_in_size), output: h_out (size: h_out_size)
+void gpu_histo2(unsigned char *h_in, unsigned int h_in_size, unsigned int *h_out, unsigned int h_out_size, unsigned int iters)
+{
+        // input on GPU memory
+        unsigned char *d_in;
+        // output on GPU memory
+        unsigned int *d_out;
+        unsigned int grid, block;
+        cudaDeviceProp prop;
+
+        if (iters == 0 || h_in_size == 0 || h_out_size == 0)
+                return; 
+
+        // allocate GPU memory
+        if (cudaMalloc((void**) &d_in, h_in_size* sizeof(unsigned char)) != cudaSuccess
+         || cudaMalloc((void**) &d_out, h_out_size * sizeof(unsigned int)) != cudaSuccess)
+                goto out;
+        
+        // copy input from the host memory to GPU memory
+        cudaMemcpy(d_in, h_in, h_in_size * sizeof(unsigned char), cudaMemcpyHostToDevice);        
+
+        checkCudaErrors(cudaGetDeviceProperties(&prop, 0));
+        grid = 2 * prop.multiProcessorCount;
+        block = h_out_size;
+
+        // for each round
+        for (int i = 0; i < iters; i++) {
+                // initialize d_out to all 0
+                cudaMemset(d_out, 0, h_out_size * sizeof(unsigned int));
+                // launch kernel
+                histo_kernel2<<<grid, block>>>(d_in, h_in_size, d_out);
+        }
+
+        // copy the result from the GPU memory to the host memory
+        cudaMemcpy(h_out, d_out, h_out_size * sizeof(unsigned int), cudaMemcpyDeviceToHost);
+
+out:
+        // free GPU memory
+        cudaFree(d_in);
+        cudaFree(d_out); 
+}
 
 __global__ void histo_kernel(unsigned char *d_in, unsigned int *d_out)
 {
@@ -113,17 +169,36 @@ int main(int argc, char **argv)
 
         printf("CPU computation time: %f ms\n", elapsed_time);
 
+        if (iters == 0) {
+                goto out;
+        }
+
         gettimeofday(&start_time, NULL);
         // calculate histogram results on GPU
         gpu_histo(array, array_size, histo, histo_size, iters);
         gettimeofday(&stop_time, NULL);
         elapsed_time = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
         
-        if (iters == 0) {
-                goto out;
+        printf("GPU implementation 1 computation time: %f ms\n", elapsed_time / iters);
+
+        // check results
+        for (int i = 0; i < histo_size; i++) {
+                //printf("%d %u %u\n", i, histo[i], expected_histo[i]);
+                if (histo[i] != expected_histo[i]) {
+                        printf("Wrong results\n");
+                        goto out;
+                }
         }
 
-        printf("GPU computation time: %f ms\n", elapsed_time / iters);
+        printf("Correct results\n");
+
+        gettimeofday(&start_time, NULL);
+        // calculate histogram results on GPU
+        gpu_histo2(array, array_size, histo, histo_size, iters);
+        gettimeofday(&stop_time, NULL);
+        elapsed_time = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
+        
+        printf("GPU implementation 2 computation time: %f ms\n", elapsed_time / iters);
 
         // check results
         for (int i = 0; i < histo_size; i++) {
