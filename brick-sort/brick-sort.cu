@@ -80,7 +80,9 @@ void gpu_brick_sort(int *h_in, unsigned int size)
         }
 
         // copy output from GPU memory to host memory
-        cudaMemcpy(h_in, d_in, size * sizeof(int), cudaMemcpyDeviceToHost);        
+        cudaMemcpy(h_in, d_in, size * sizeof(int), cudaMemcpyDeviceToHost);
+        // free GPU memory
+        cudaFree(d_in);        
 }
 
 int main() 
