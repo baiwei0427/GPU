@@ -184,7 +184,7 @@ int main()
         for (int i = 0; i < array_size; i++) {
                 //printf("%d ", h_in[i]);
                 if (h_in[i] != array[i]) {
-                        h_in[i] = false;
+                        result = false;
                 }
         }         
         //printf("\n");  
