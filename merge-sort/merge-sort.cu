@@ -132,7 +132,7 @@ void gpu_merge_sort(int *h_in, int size)
 
 int main()
 {
-        int array_size = 1111;
+        int array_size = 111111;
         int array[array_size];
         // sort result computed by GPU
         int h_in[array_size];

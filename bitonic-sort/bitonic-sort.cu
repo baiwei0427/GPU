@@ -20,7 +20,7 @@ void compare_swap(int *array, int a, int b, bool up)
         }
 }
 
-void bitonic_merge(int *array, int start, int size, bool up)
+void cpu_bitonic_merge(int *array, int start, int size, bool up)
 {
         if (size <= 1)
                 return;
@@ -33,27 +33,27 @@ void bitonic_merge(int *array, int start, int size, bool up)
         // we have two bitonic subarraies now
         // max of the first one <= min of the second one
         // continue the merge recursively  
-        bitonic_merge(array, start, m, up);
-        bitonic_merge(array, start + m, size - m, up);
+        cpu_bitonic_merge(array, start, m, up);
+        cpu_bitonic_merge(array, start + m, size - m, up);
 }
 
-void bitonic_sort(int *array, int start, int size, bool up)
+void cpu_bitonic_sort(int *array, int start, int size, bool up)
 {
         if (size <= 1)
                 return;
 
         // sort the first subarray in the reverse direction
-        bitonic_sort(array, start, size / 2, !up);
+        cpu_bitonic_sort(array, start, size / 2, !up);
         // sort the second subarray in the same direction
-        bitonic_sort(array, start + size / 2, size - size / 2, up);
+        cpu_bitonic_sort(array, start + size / 2, size - size / 2, up);
 
-        // we have a bitonic array now, change/merge it into a sorted one
-        bitonic_merge(array, start, size, up);
+        // merge two sorted subarraies into a sorted one
+        cpu_bitonic_merge(array, start, size, up);
 }
 
-void sort(int *array, int size, bool up)
+void cpu_sort(int *array, int size, bool up)
 {
-        bitonic_sort(array, 0, size, up);
+        cpu_bitonic_sort(array, 0, size, up);
 }
 
 int main()
@@ -71,14 +71,14 @@ int main()
         }
         printf("\n");
 
-        sort(array, array_size, true);
+        cpu_sort(array, array_size, true);
 
         printf("Output\n");
         for (int i = 0; i < array_size; i++) {
                 printf("%d ", array[i]);
-                if (i >= 1 && array[i] < array[i - 1]) {
+                /*if (i >= 1 && array[i] < array[i - 1]) {
                         printf("Wrong\n");
-                }
+                }*/
         }         
         printf("\n");  
 
