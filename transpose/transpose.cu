@@ -3,7 +3,7 @@
 #include "helper_cuda.h"
 
 const int N = 1024;     // matrix size is N x N
-//const int K = 32;       // tile size is K x K 
+const int K = 32;       // tile size is K x K 
 
 void transpose_cpu(int *in, int *out) 
 {
@@ -30,6 +30,14 @@ __global__ void transpose_parallel_per_row(int *in, int *out)
         for (int col = 0; col < N; col++) {
                 out[col * N + row] = in[row * N + col];
         }
+}
+
+__global__ void transpose_parallel_per_element(int *in, int *out)
+{
+        int col = blockIdx.x * blockDim.x + threadIdx.x;
+        int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+        out[col * N + row] = in[row * N + col];
 }
 
 void print_matrix(int *in) 
@@ -72,6 +80,8 @@ int main(int argc, char **argv)
         int *h_out = (int*)malloc(num_bytes);
         int *expected_out = (int*)malloc(num_bytes);
         int *d_in, *d_out;
+        dim3 blocks(N/K, N/K);   // blocks per grid
+	dim3 threads(K, K);      // threads per block
 
         // no enough host memory
         if (!h_in || !h_out || !expected_out) {
@@ -124,6 +134,20 @@ int main(int argc, char **argv)
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
         printf("transpose_parallel_per_row time: %f ms\n%s results\n", elapsed_time, 
+               same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+
+        // launch parallel per element kernel
+        cudaEventRecord(start);
+        transpose_parallel_per_element<<<blocks, threads>>>(d_in, d_out);        
+        cudaEventRecord(stop);
+
+        // copy output from GPU memory to host memory
+        checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
+
+        // calculate elapsed time in ms and check results
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        printf("transpose_parallel_per_element time: %f ms\n%s results\n", elapsed_time, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
 
         // free GPU memory
