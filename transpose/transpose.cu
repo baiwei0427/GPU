@@ -23,6 +23,15 @@ __global__ void transpose_serial(int *in, int *out)
         }
 }
 
+__global__ void transpose_parallel_per_row(int *in, int *out)
+{
+        int row = threadIdx.x;
+
+        for (int col = 0; col < N; col++) {
+                out[col * N + row] = in[row * N + col];
+        }
+}
+
 void print_matrix(int *in) 
 {
         for (int row = 0; row < N; row++) {
@@ -103,6 +112,20 @@ int main(int argc, char **argv)
         printf("transpose_serial time: %f ms\n%s results\n", elapsed_time, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
 
+        // launch parallel per row kernel
+        cudaEventRecord(start);
+        transpose_parallel_per_row<<<1, N>>>(d_in, d_out);        
+        cudaEventRecord(stop);
+
+        // copy output from GPU memory to host memory
+        checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
+
+        // calculate elapsed time in ms and check results
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        printf("transpose_parallel_per_row time: %f ms\n%s results\n", elapsed_time, 
+               same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+
         // free GPU memory
         cudaFree(d_in);
         cudaFree(d_out);
@@ -110,6 +133,7 @@ int main(int argc, char **argv)
 out:
         free(h_in);
         free(h_out);
+        free(expected_out);
 
         return 0;
 }
