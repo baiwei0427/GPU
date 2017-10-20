@@ -80,8 +80,12 @@ int main(int argc, char **argv)
         int *h_out = (int*)malloc(num_bytes);
         int *expected_out = (int*)malloc(num_bytes);
         int *d_in, *d_out;
-        dim3 blocks(N/K, N/K);   // blocks per grid
-	dim3 threads(K, K);      // threads per block
+        dim3 blocks(N/K, N/K);  // blocks per grid
+	dim3 threads(K, K);     // threads per block
+        cudaDeviceProp prop;    // CUDA device properties   
+        int device = 0;         // ID of device for GPU execution
+        double peakMemBwGbps;   // GPU peak memory bandwidth in Gbps 
+        double memUtil;         // GPU memory bandwidth utilization
 
         // no enough host memory
         if (!h_in || !h_out || !expected_out) {
@@ -97,6 +101,15 @@ int main(int argc, char **argv)
         gettimeofday(&stop_time, NULL);
         elapsed_time = (stop_time.tv_sec - start_time.tv_sec) * 1000 + (stop_time.tv_usec - start_time.tv_usec) / 1000.0;
         printf("CPU time: %f ms\n", elapsed_time);
+
+        // Set device to be used for GPU executions
+        checkCudaErrors(cudaSetDevice(device));
+        // Get device properties
+        cudaGetDeviceProperties(&prop, device);
+        // Calculate peark memory bandwidth (GB/s) of GPU
+        peakMemBwGbps = 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6;
+        printf("Peak memory bandwidth of GPU %d is %f GB/s\n", device, peakMemBwGbps);
+        printf("====================================================\n");
 
         // allocate GPU memory
         checkCudaErrors(cudaMalloc(&d_in, num_bytes));
@@ -116,11 +129,16 @@ int main(int argc, char **argv)
         // copy output from GPU memory to host memory
         checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
 
-        // calculate elapsed time in ms and check results
+        // calculate elapsed time in ms and memory utilization
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
-        printf("transpose_serial time: %f ms\n%s results\n", elapsed_time, 
+        memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9);
+
+        printf("transpose_serial time: %f ms\nMemory utilization %f\%\n%s results\n", 
+               elapsed_time,
+               memUtil * 100,
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+        printf("====================================================\n");
 
         // launch parallel per row kernel
         cudaEventRecord(start);
@@ -130,11 +148,16 @@ int main(int argc, char **argv)
         // copy output from GPU memory to host memory
         checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
 
-        // calculate elapsed time in ms and check results
+        // calculate elapsed time in ms and memory utilization
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
-        printf("transpose_parallel_per_row time: %f ms\n%s results\n", elapsed_time, 
+        memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9);        
+
+        printf("transpose_parallel_per_row time: %f ms\nMemory utilization %f\%\n%s results\n", 
+               elapsed_time,
+               memUtil * 100,                
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+        printf("====================================================\n");
 
         // launch parallel per element kernel
         cudaEventRecord(start);
@@ -147,8 +170,13 @@ int main(int argc, char **argv)
         // calculate elapsed time in ms and check results
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
-        printf("transpose_parallel_per_element time: %f ms\n%s results\n", elapsed_time, 
+        memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
+
+        printf("transpose_parallel_per_element time: %f ms\nMemory utilization %f\%\n%s results\n", 
+               elapsed_time,
+               memUtil * 100, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+        printf("====================================================\n");
 
         // free GPU memory
         cudaFree(d_in);
