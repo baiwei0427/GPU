@@ -40,6 +40,22 @@ __global__ void transpose_parallel_per_element(int *in, int *out)
         out[col * N + row] = in[row * N + col];
 }
 
+__global__ void transpose_parallel_per_element_tiled(int *in, int *out)
+{       
+        __shared__ int s_data[K][K];
+        int x = threadIdx.x, y = threadIdx.y;
+
+        int in_corner_x = blockIdx.x * K, in_corner_y = blockIdx.y * K;
+        int out_corner_x = in_corner_y, out_corner_y = in_corner_x; 
+
+        // write in[y][x] to s_data[y][x]
+        s_data[y][x] = in[(in_corner_y + y) * N + (in_corner_x + x)];
+        __syncthreads();
+
+        // write s_data[x][y] to out[y][x] 
+        out[(out_corner_y + y) * N + (out_corner_x + x)] = s_data[x][y];
+}
+
 void print_matrix(int *in) 
 {
         for (int row = 0; row < N; row++) {
@@ -173,6 +189,25 @@ int main(int argc, char **argv)
         memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
 
         printf("transpose_parallel_per_element time: %f ms\nMemory utilization %f\%\n%s results\n", 
+               elapsed_time,
+               memUtil * 100, 
+               same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+        printf("====================================================\n");
+
+        // launch parallel per element tiled kernel
+        cudaEventRecord(start);
+        transpose_parallel_per_element_tiled<<<blocks, threads>>>(d_in, d_out);        
+        cudaEventRecord(stop);
+
+        // copy output from GPU memory to host memory
+        checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
+
+        // calculate elapsed time in ms and check results
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
+
+        printf("transpose_parallel_per_element_tiled time: %f ms\nMemory utilization %f\%\n%s results\n", 
                elapsed_time,
                memUtil * 100, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
