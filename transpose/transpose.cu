@@ -150,7 +150,7 @@ int main(int argc, char **argv)
         cudaEventElapsedTime(&elapsed_time, start, stop);
         memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9);
 
-        printf("transpose_serial time: %f ms\nMemory utilization %f\%\n%s results\n", 
+        printf("transpose_serial\nTime: %f ms\nMemory utilization %f\%\n%s results\n", 
                elapsed_time,
                memUtil * 100,
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
         cudaEventElapsedTime(&elapsed_time, start, stop);
         memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9);        
 
-        printf("transpose_parallel_per_row time: %f ms\nMemory utilization %f\%\n%s results\n", 
+        printf("transpose_parallel_per_row\nTime: %f ms\nMemory utilization %f\%\n%s results\n", 
                elapsed_time,
                memUtil * 100,                
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
@@ -188,7 +188,7 @@ int main(int argc, char **argv)
         cudaEventElapsedTime(&elapsed_time, start, stop);
         memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
 
-        printf("transpose_parallel_per_element time: %f ms\nMemory utilization %f\%\n%s results\n", 
+        printf("transpose_parallel_per_element\nTime: %f ms\nMemory utilization %f\%\n%s results\n", 
                elapsed_time,
                memUtil * 100, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
@@ -207,7 +207,9 @@ int main(int argc, char **argv)
         cudaEventElapsedTime(&elapsed_time, start, stop);
         memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
 
-        printf("transpose_parallel_per_element_tiled time: %f ms\nMemory utilization %f\%\n%s results\n", 
+        printf("transpose_parallel_per_element_tiled (block: %d x %d)\nTime: %f ms\nMemory utilization %f\%\n%s results\n", 
+               K,
+               K,
                elapsed_time,
                memUtil * 100, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
