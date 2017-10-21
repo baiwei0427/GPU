@@ -56,6 +56,22 @@ __global__ void transpose_parallel_per_element_tiled(int *in, int *out)
         out[(out_corner_y + y) * N + (out_corner_x + x)] = s_data[x][y];
 }
 
+__global__ void transpose_parallel_per_element_tiled16(int *in, int *out)
+{       
+        __shared__ int s_data[16][16];
+        int x = threadIdx.x, y = threadIdx.y;
+
+        int in_corner_x = blockIdx.x * 16, in_corner_y = blockIdx.y * 16;
+        int out_corner_x = in_corner_y, out_corner_y = in_corner_x; 
+
+        // write in[y][x] to s_data[y][x]
+        s_data[y][x] = in[(in_corner_y + y) * N + (in_corner_x + x)];
+        __syncthreads();
+
+        // write s_data[x][y] to out[y][x] 
+        out[(out_corner_y + y) * N + (out_corner_x + x)] = s_data[x][y];
+}
+
 void print_matrix(int *in) 
 {
         for (int row = 0; row < N; row++) {
@@ -96,12 +112,14 @@ int main(int argc, char **argv)
         int *h_out = (int*)malloc(num_bytes);
         int *expected_out = (int*)malloc(num_bytes);
         int *d_in, *d_out;
-        dim3 blocks(N/K, N/K);  // blocks per grid
-	dim3 threads(K, K);     // threads per block
-        cudaDeviceProp prop;    // CUDA device properties   
-        int device = 0;         // ID of device for GPU execution
-        double peakMemBwGbps;   // GPU peak memory bandwidth in Gbps 
-        double memUtil;         // GPU memory bandwidth utilization
+        dim3 blocks(N/K, N/K);          // blocks per grid
+        dim3 threads(K, K);             // threads per block
+        dim3 blocks16x16(N/16, N/16);   // blocks per grid
+        dim3 threads16x16(16, 16);      // threads per block
+        cudaDeviceProp prop;            // CUDA device properties   
+        int device = 0;                 // ID of device for GPU execution
+        double peakMemBwGbps;           // GPU peak memory bandwidth in Gbps 
+        double memUtil;                 // GPU memory bandwidth utilization
 
         // no enough host memory
         if (!h_in || !h_out || !expected_out) {
@@ -214,6 +232,25 @@ int main(int argc, char **argv)
                memUtil * 100, 
                same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
         printf("====================================================\n");
+
+        // launch parallel per element tiled kernel with different block size (16x16)
+        cudaEventRecord(start);
+        transpose_parallel_per_element_tiled16<<<blocks16x16, threads16x16>>>(d_in, d_out);        
+        cudaEventRecord(stop);
+
+        // copy output from GPU memory to host memory
+        checkCudaErrors(cudaMemcpy(h_out, d_out, num_bytes, cudaMemcpyDeviceToHost));
+
+        // calculate elapsed time in ms and check results
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        memUtil = (2 * N * N * sizeof(int)) / (elapsed_time / 1.0e3) / (peakMemBwGbps * 1.0e9); 
+
+        printf("transpose_parallel_per_element_tiled (block: 16 x 16)\nTime: %f ms\nMemory utilization %f\%\n%s results\n", 
+               elapsed_time,
+               memUtil * 100, 
+               same_matrices(h_out, expected_out) ? "Correct" : "Wrong");
+        printf("====================================================\n");        
 
         // free GPU memory
         cudaFree(d_in);
