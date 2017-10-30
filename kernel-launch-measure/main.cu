@@ -5,10 +5,10 @@ __global__ void EmptyKernel() { }
 
 void usage(char *program)
 {       
-        printf("usage: %s nblocks nthreads iters\n", program);
-        printf("    nblocks: number of thread blocks (>0)\n");
-        printf("    nthreads: number of threads per block (>0)\n");
-        printf("    iters: number of iterations (>0)\n");
+        fprintf(stderr, "usage: %s nblocks nthreads iters\n", program);
+        fprintf(stderr, "    nblocks: number of thread blocks (>0)\n");
+        fprintf(stderr, "    nthreads: number of threads per block (>0)\n");
+        fprintf(stderr, "    iters: number of iterations (>0)\n");
 }
 
 int main(int argc, char **argv) {
