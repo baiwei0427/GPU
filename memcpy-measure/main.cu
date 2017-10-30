@@ -49,7 +49,7 @@ int main(int argc, char **argv)
                 // memory transfer from host to device
                 cudaEventRecord(start, 0);
                 if (cudaMemcpy(d_ptr, h_ptr, size, cudaMemcpyHostToDevice) != cudaSuccess) {
-                        printf("Error: memcpy from host to device\n");
+                        fprintf(stderr, "Error: memcpy from host to device\n");
                 }
                 cudaEventRecord(stop, 0);
                 cudaEventSynchronize(stop);
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
                 // memory transfer from device to host
                 cudaEventRecord(start, 0);
                 if (cudaMemcpy(h_ptr, d_ptr, size, cudaMemcpyDeviceToHost) != cudaSuccess) {
-                        printf("Error: memcpy from device to host\n");
+                        fprintf(stderr, "Error: memcpy from device to host\n");
                 }
                 cudaEventRecord(stop, 0);
                 cudaEventSynchronize(stop);
