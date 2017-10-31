@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sched.h>
 
 void usage(char *program)
 {     
-        fprintf(stderr, "usage: %s memsize iters\n", program);
+        fprintf(stderr, "usage: %s memsize iters [-a]\n", program);
         fprintf(stderr, "    memsize: memory transferred in bytes (>0)\n");
-        fprintf(stderr, "    iters: number of iterations (>0)\n");
+        fprintf(stderr, "    iters  : number of iterations (>0)\n");
+        fprintf(stderr, "    -a     : set CPU affinity\n");
 }
 
 int main(int argc, char **argv)
@@ -14,8 +16,10 @@ int main(int argc, char **argv)
         char *h_a, *h_b, *d;    // host and device memory
         cudaEvent_t start, stop;
         float time, cumulative_h2d_time = 0.f, cumulative_d2h_time = 0.f, throughput, avg_time;
+        bool set_affinity = false;     
+        cpu_set_t  mask;
 
-        if (argc != 3) {
+        if (!(argc == 3 || (argc == 4 && strcmp(argv[3], "-a") == 0))) {
                 usage(argv[0]);
                 return EXIT_FAILURE;
         }
@@ -26,6 +30,20 @@ int main(int argc, char **argv)
         if (size <= 0 || iters <= 0) {
                 usage(argv[0]);
                 return EXIT_FAILURE;
+        }
+
+        if (argc == 4) {
+                set_affinity = true;
+        }
+
+        // set a process's CPU affinity mask
+        if (set_affinity) {
+                CPU_ZERO(&mask);
+                CPU_SET(0, &mask);
+                if (sched_setaffinity(0, sizeof(mask), &mask) != 0) {
+                        fprintf(stderr, "Error: set CPU affinity\n");
+                        return EXIT_FAILURE;
+                }
         }
 
         // allocate host memory
