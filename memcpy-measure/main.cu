@@ -14,44 +14,43 @@ void usage(char *program)
 void profile_memcpy(char *h_in, char *h_out, char *d, int size, int iters)
 {
         cudaEvent_t start, stop;
-        float time, h2d_total_time, d2h_total_time, throughput, avg_time;
+        float time, throughput, avg_time;
         int i;
 
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
-        h2d_total_time = d2h_total_time = 0;
 
+        // memory transfer from host to device
+        cudaEventRecord(start, 0);
         for (i = 0; i < iters; i++) {
-                // memory transfer from host to device
-                cudaEventRecord(start, 0);
                 if (cudaMemcpy(d, h_in, size, cudaMemcpyHostToDevice) != cudaSuccess) {
                         fprintf(stderr, "Error: memcpy from host to device\n");
                 }
-                cudaEventRecord(stop, 0);
-                cudaEventSynchronize(stop);
-                cudaEventElapsedTime(&time, start, stop);
-                h2d_total_time += time;    
-
-                // memory transfer from device to host
-                cudaEventRecord(start, 0);
-                if (cudaMemcpy(h_out, d, size, cudaMemcpyDeviceToHost) != cudaSuccess) {
-                        fprintf(stderr, "Error: memcpy from device to host\n");
-                }
-                cudaEventRecord(stop, 0);
-                cudaEventSynchronize(stop);
-                cudaEventElapsedTime(&time, start, stop);
-                d2h_total_time += time;     
         }
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&time, start, stop);
 
         // calculate host to device information
-        avg_time = h2d_total_time / iters / 1000;  // time in second
+        avg_time = time / iters / 1000;  // time in second
         throughput = (float)size / avg_time / 1000000000; // throughput in GB/s
 
         printf("  Host to Device Time: %.6f s\n", avg_time);
         printf("  Host to Device Throughput: %.6f GB/s\n", throughput);
 
+        // memory transfer from device to host
+        cudaEventRecord(start, 0);        
+        for (i = 0; i < iters; i++) {
+                if (cudaMemcpy(h_out, d, size, cudaMemcpyDeviceToHost) != cudaSuccess) {
+                        fprintf(stderr, "Error: memcpy from device to host\n");
+                }
+        }
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&time, start, stop);        
+        
         // calculate device to host information
-        avg_time = d2h_total_time / iters / 1000;  // time in second
+        avg_time = time / iters / 1000;  // time in second
         throughput = (float)size / avg_time / 1000000000; // throughput in GB/s
 
         printf("  Device to Host Time: %.6f s\n", avg_time);
