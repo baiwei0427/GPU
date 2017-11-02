@@ -1,10 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <sched.h>
 
 void usage(char *program)
 {     
-        fprintf(stderr, "usage: %s memsize iters [-a]\n", program);
+        fprintf(stderr, "usage: %s memsize iters\n", program);
         fprintf(stderr, "    memsize: memory transferred in bytes (>0)\n");
         fprintf(stderr, "    iters  : number of iterations (>0)\n");
 }
