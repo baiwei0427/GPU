@@ -7,7 +7,6 @@ void usage(char *program)
         fprintf(stderr, "usage: %s memsize iters [-a]\n", program);
         fprintf(stderr, "    memsize: memory transferred in bytes (>0)\n");
         fprintf(stderr, "    iters  : number of iterations (>0)\n");
-        fprintf(stderr, "    -a     : set CPU affinity\n");
 }
 
 // copy size worth of bytes from h_in to d, then from d back to h_out for iters rounds
@@ -66,10 +65,8 @@ int main(int argc, char **argv)
         char *h_in_pageable, *h_out_pageable;   // host pageable memory 
         char *h_in_pinned, *h_out_pinned;       // host pinned memory 
         char *d;        // device memory
-        bool set_affinity = false;     
-        cpu_set_t  mask;
 
-        if (!(argc == 3 || (argc == 4 && strcmp(argv[3], "-a") == 0))) {
+        if (argc != 3) {
                 usage(argv[0]);
                 return EXIT_FAILURE;
         }
@@ -80,20 +77,6 @@ int main(int argc, char **argv)
         if (size <= 0 || iters <= 0) {
                 usage(argv[0]);
                 return EXIT_FAILURE;
-        }
-
-        if (argc == 4) {
-                set_affinity = true;
-        }
-
-        // set a process's CPU affinity mask
-        if (set_affinity) {
-                CPU_ZERO(&mask);
-                CPU_SET(0, &mask);
-                if (sched_setaffinity(0, sizeof(mask), &mask) != 0) {
-                        fprintf(stderr, "Error: set CPU affinity\n");
-                        return EXIT_FAILURE;
-                }
         }
 
         // allocate host pageable memory
