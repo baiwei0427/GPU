@@ -65,7 +65,7 @@ int main(int argc,char** argv)
         cudaMemset(darray, 0, sizeof(float) * size);
 
         //copy host angle data to global memory
-        cudaMemcpyToSymbol(gangle, hangle, sizeof(float) * ANGLE_COUNT);
+        cudaMemcpy(gangle, hangle, sizeof(float) * ANGLE_COUNT, cudaMemcpyHostToDevice);
         
         cudaEventRecord(startEvent, 0);
         test_kernel2<<<blocks, threads_per_block>>>(darray);
