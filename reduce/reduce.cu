@@ -124,6 +124,17 @@ __global__ void reduce_kernel3(int *d_out, int *d_in)
     }    
 }
 
+__device__ void warpReduce(volatile int* s_data, int tid) 
+{
+    s_data[tid] += s_data[tid + 32];
+    s_data[tid] += s_data[tid + 16];
+    s_data[tid] += s_data[tid + 8];
+    s_data[tid] += s_data[tid + 4];
+    s_data[tid] += s_data[tid + 2];
+    s_data[tid] += s_data[tid + 1];
+}
+
+
 // Unroll the last warp
 __global__ void reduce_kernel4(int *d_out, int *d_in)
 {
@@ -151,18 +162,7 @@ __global__ void reduce_kernel4(int *d_out, int *d_in)
 
     // now we only have 32 active threads (a warp) left
     if (tid < 32) {
-        s_data[tid] += s_data[tid + 32];
-        __syncthreads();
-        s_data[tid] += s_data[tid + 16];
-        __syncthreads();
-        s_data[tid] += s_data[tid + 8];
-        __syncthreads();
-        s_data[tid] += s_data[tid + 4];
-        __syncthreads();
-        s_data[tid] += s_data[tid + 2];
-        __syncthreads();
-        s_data[tid] += s_data[tid + 1];
-        __syncthreads();
+        warpReduce(s_data, tid);
     }
 
     if (tid == 0) {
