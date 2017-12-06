@@ -138,7 +138,6 @@ void print_kernel_info(int kernel_id)
             case 1:
                 printf("Interleaved addressing with bank conflicts\n");
                 break;  
-             
             case 2:
                 printf("Sequential addressing\n");
                 break;
