@@ -129,6 +129,26 @@ inline bool is_power_of_2(int n)
     return ((n & (n - 1)) == 0);
 }
 
+void print_kernel_info(int kernel_id) 
+{
+        switch (kernel_id) {
+            case 0: 
+                printf("Interleaved addressing with divergent branching\n");
+                break;
+            case 1:
+                printf("Interleaved addressing with bank conflicts\n");
+                break;  
+             
+            case 2:
+                printf("Sequential addressing\n");
+                break;
+            case 3:
+                printf("First add during global load\n");
+                break;              
+            default:
+                printf("Invalid kernel function ID %d\n", kernel_id);        
+        }    
+}
 
 // input: array (in host memory), array size, expected result, kernel function ID and iterations 
 void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int iters)
@@ -141,7 +161,14 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
     int *d_in, *d_intermediate, *d_out;
     // final result in host memory
     int h_out;
+    // events to record start and stop time
+    cudaEvent_t start, stop;
+    // elapsed time
+    float elapsed_time;
 
+    // print kernel information
+    print_kernel_info(kernel_id); 
+    
     if (!h_in || array_size <= 0 || !is_power_of_2(array_size))
         goto out;
 
@@ -153,10 +180,15 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
      || cudaMalloc((void**) &d_intermediate, blocks * sizeof(int)) != cudaSuccess
      || cudaMalloc((void**) &d_out, sizeof(int)) != cudaSuccess)
         goto out;
-    
 
     // copy the input array from the host memory to the GPU memory
     cudaMemcpy(d_in, h_in, array_size * sizeof(int), cudaMemcpyHostToDevice);
+
+    // create events
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
 
     // run many times
     for (int i = 0; i < iters; i++) {
@@ -188,6 +220,17 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
                 goto out;      
         }
     }
+
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&elapsed_time, start, stop);    
+    elapsed_time /= iters;      
+    printf("Average time elapsed: %f ms\n", elapsed_time);
+
+    // destroy events
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     // copy the result from the GPU memory to the host memory
     cudaMemcpy(&h_out, d_out, sizeof(int), cudaMemcpyDeviceToHost);
@@ -240,20 +283,8 @@ int main(int argc, char **argv)
         sum += h_in[i];
     }
 
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    
-    cudaEventRecord(start, 0);
+    // launch reduce kernels
     reduce(h_in, ARRAY_SIZE, sum, kernel_id, iters);
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
-
-    float elapsed_time;
-    cudaEventElapsedTime(&elapsed_time, start, stop);    
-    elapsed_time /= iters;      
-
-    printf("Average time elapsed: %f ms\n", elapsed_time);
 
     return 0;
 }
