@@ -124,6 +124,52 @@ __global__ void reduce_kernel3(int *d_out, int *d_in)
     }    
 }
 
+// Unroll the last warp
+__global__ void reduce_kernel4(int *d_out, int *d_in)
+{
+    extern __shared__ int s_data[];
+
+    // thread ID inside the block
+    unsigned int tid = threadIdx.x;
+    // global ID across all blocks
+    unsigned int gid = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    s_data[tid] = d_in[gid] + d_in[gid + blockDim.x];
+    // Ensure all elements have been copied into shared memory
+    __syncthreads();    
+
+    // s = blockDim.x / 2, ....., 128, 64
+    for (unsigned int s = (blockDim.x >> 1); s > 32; s >>= 1) {
+        if (tid < s) {
+            s_data[tid] += s_data[tid + s];
+        }
+        // Ensure all threads in the block finish add in this round
+        __syncthreads();
+    }
+
+    // now we only have 32 active threads (a warp) left
+    if (tid < 32) {
+        s_data[tid] += s_data[tid + 32];
+        __syncthreads();
+        s_data[tid] += s_data[tid + 16];
+        __syncthreads();
+        s_data[tid] += s_data[tid + 8];
+        __syncthreads();
+        s_data[tid] += s_data[tid + 4];
+        __syncthreads();
+        s_data[tid] += s_data[tid + 2];
+        __syncthreads();
+        s_data[tid] += s_data[tid + 1];
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        d_out[blockIdx.x] = s_data[0];
+    }    
+}
+
 inline bool is_power_of_2(int n)
 {
     return ((n & (n - 1)) == 0);
@@ -143,7 +189,10 @@ void print_kernel_info(int kernel_id)
                 break;
             case 3:
                 printf("First add during global load\n");
-                break;              
+                break;
+            case 4:
+                printf("Unroll last warp\n");
+                break;                  
             default:
                 printf("Invalid kernel function ID %d\n", kernel_id);        
         }    
@@ -194,9 +243,7 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
         switch (kernel_id) {
             // Interleaved addressing with divergent branching 
             case 0: 
-                // first stage reduce
-                reduce_kernel0<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in);
-                // second stage reduce    
+                reduce_kernel0<<<blocks, threads, threads * sizeof(int)>>>(d_intermediate, d_in); 
                 reduce_kernel0<<<1, blocks, blocks * sizeof(int)>>>(d_out, d_intermediate);
                 break;
             // Interleaved addressing with bank conflicts
@@ -213,7 +260,12 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
             case 3:
                 reduce_kernel3<<<blocks, threads / 2 , threads / 2 * sizeof(int)>>>(d_intermediate, d_in);
                 reduce_kernel3<<<1, blocks / 2, blocks / 2 * sizeof(int)>>>(d_out, d_intermediate);  
-                break;              
+                break;
+            // Unroll last warp
+            case 4:
+                reduce_kernel4<<<blocks, threads / 2 , threads / 2 * sizeof(int)>>>(d_intermediate, d_in);
+                reduce_kernel4<<<1, blocks / 2, blocks / 2 * sizeof(int)>>>(d_out, d_intermediate);  
+                break;                          
             default:
                 printf("Invalid kernel function ID %d\n", kernel_id);   
                 goto out;      
