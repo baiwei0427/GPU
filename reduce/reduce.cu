@@ -295,6 +295,106 @@ void run_reduce_kernel5(int *d_out, int *d_in, unsigned int blocks, unsigned int
     }
 }
 
+// Add multiple elements per thread
+template <unsigned int block_size> __global__ void reduce_kernel6(int *d_out, int *d_in, unsigned int size)
+{
+    extern __shared__ int s_data[];
+
+    // thread ID inside the block
+    unsigned int tid = threadIdx.x;
+    // global ID across all blocks
+    unsigned int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    // total # of threads 
+    unsigned int stride = gridDim.x * blockDim.x;
+
+    // perform sequential reduction
+    s_data[tid] = 0;
+    while (gid < size) {
+        s_data[tid] += d_in[gid];
+        gid += stride;
+    }
+    __syncthreads();
+
+    if (block_size >= 1024) {
+        if (tid < 512) { 
+            s_data[tid] += s_data[tid + 512]; 
+        }
+        __syncthreads(); 
+    } 
+    
+    if (block_size >= 512) {
+        if (tid < 256) { 
+            s_data[tid] += s_data[tid + 256]; 
+        }
+        __syncthreads(); 
+    } 
+
+    if (block_size >= 256) {
+        if (tid < 128) { 
+            s_data[tid] += s_data[tid + 128]; 
+        }
+        __syncthreads(); 
+    } 
+
+    if (block_size >= 128) {
+        if (tid < 64) { 
+            s_data[tid] += s_data[tid + 64]; 
+        }
+        __syncthreads(); 
+    }
+
+    // only a warp left
+    if (tid < 32) {
+        warpReduce5<block_size>(s_data, tid); 
+    }
+
+    if (tid == 0) {
+        d_out[blockIdx.x] = s_data[0];
+    }   
+}
+
+// wrapper function to run reduce_kernel6
+void run_reduce_kernel6(int *d_out, int *d_in, unsigned int size, unsigned int blocks, unsigned int threads)
+{
+    switch (threads) {
+        case 1024:
+            reduce_kernel6<1024><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);
+            break;
+        case 512:
+            reduce_kernel6< 512><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);
+            break;
+        case 256:
+            reduce_kernel6< 256><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 128:
+            reduce_kernel6< 128><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 64:
+            reduce_kernel6<  64><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 32:
+            reduce_kernel6<  32><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);
+            break;
+        case 16:
+            reduce_kernel6<  16><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 8:
+            reduce_kernel6<   8><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 4:
+            reduce_kernel6<   4><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 2:
+            reduce_kernel6<   2><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        case 1:
+            reduce_kernel6<   1><<<blocks, threads, threads * sizeof(int)>>>(d_out, d_in, size);        
+            break;
+        default:
+            printf("Invalid block size %u\n", threads);                        
+    }
+}
+
 inline bool is_power_of_2(int n)
 {
     return ((n & (n - 1)) == 0);
@@ -320,6 +420,9 @@ void print_kernel_info(int kernel_id)
             break;
         case 5:
             printf("Completely unrolled\n");
+            break;
+        case 6:
+            printf("Multiple elements per thread\n");
             break;              
         default:
             printf("Invalid kernel function ID %d\n", kernel_id);        
@@ -345,12 +448,20 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
     // print kernel information
     print_kernel_info(kernel_id); 
     
-    if (!h_in || array_size <= 0 || !is_power_of_2(array_size))
+    if (!h_in || array_size <= 0 || !is_power_of_2(array_size)) {
         goto out;
+    }
 
-    if (array_size > threads)
+    if (array_size > threads) {
         blocks = array_size / threads;
-    
+    }
+
+    // If each thread can reduce multiple elements
+    if (kernel_id == 6) {
+        blocks = 256;
+        threads = 256;
+    }
+
     // allocate GPU memory
     if (cudaMalloc((void**) &d_in, array_size * sizeof(int)) != cudaSuccess
      || cudaMalloc((void**) &d_intermediate, blocks * sizeof(int)) != cudaSuccess
@@ -398,6 +509,11 @@ void reduce(int *h_in, int array_size, int expected_result, int kernel_id, int i
             case 5:
                 run_reduce_kernel5(d_intermediate, d_in, blocks, threads / 2);
                 run_reduce_kernel5(d_out, d_intermediate, 1, blocks / 2);               
+                break;
+            // Multiple elements per thread
+            case 6:
+                run_reduce_kernel6(d_intermediate, d_in, array_size, blocks, threads);
+                run_reduce_kernel6(d_out, d_intermediate, blocks, 1, blocks / 2);             
                 break;                          
             default:
                 printf("Invalid kernel function ID %d\n", kernel_id);   
