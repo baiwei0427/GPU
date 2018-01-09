@@ -21,7 +21,7 @@ Stream Scheduling
     <li>Preceding calls in the same queue have been dispatched, and</li>
     <li>Resources are available</li>
   </ul>
-  <li>CUDA kernels may be executed concurrently if they are in different streams</li>
+  <li><b>CUDA kernels may be executed concurrently if they are in different streams</b></li>
   <ul>
     <li>Threadblocks for a given kernel are scheduled if all threadblocks for preceding kernels have been
 scheduled and there still are SM resources available</li>
