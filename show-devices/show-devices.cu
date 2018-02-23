@@ -13,7 +13,7 @@ void print_device_info(cudaDeviceProp prop)
         printf("Maximum number of threads per block: %d\n", prop.maxThreadsPerBlock);
         printf("Maximum resident threads per multiprocessor: %d\n", prop.maxThreadsPerMultiProcessor);
         
-        printf("Global memory available on device in bytes: %u\n", prop.totalGlobalMem);
+        printf("Global memory available on device in bytes: %lu (%lu MB)\n", prop.totalGlobalMem, prop.totalGlobalMem >> 20);
         printf("Shared memory available per block in bytes: %d\n", prop.sharedMemPerBlock);
         printf("Shared memory available per multiprocessor in bytes: %d\n", prop.sharedMemPerMultiprocessor);
         printf("Size of L2 cache in bytes: %d\n", prop.l2CacheSize);
